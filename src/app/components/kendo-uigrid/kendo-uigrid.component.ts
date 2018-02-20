@@ -1,12 +1,13 @@
-// Built in angular modules
-import { Component, OnInit } from '@angular/core';
+import { Observable } from 'rxjs/Observable';
+import { Component, OnInit, Inject } from '@angular/core';
 
-// Custom Services
-import { GitHubUserService } from '../../services/git-hub-user.service';
+import { GridDataResult } from '@progress/kendo-angular-grid';
+import { State, process } from '@progress/kendo-data-query';
 
-// Kendo UI Components 
-import { GridDataResult, PageChangeEvent } from '@progress/kendo-angular-grid';
-import { SortDescriptor, orderBy } from '@progress/kendo-data-query';
+import { Product } from '../../models/product';
+import { EditService } from '../../services/edit.service';
+
+import { map } from 'rxjs/operators/map';
 
 @Component({
   selector: 'app-kendo-uigrid',
@@ -15,60 +16,60 @@ import { SortDescriptor, orderBy } from '@progress/kendo-data-query';
 })
 
 export class KendoUigridComponent implements OnInit {
-  public gridView: GridDataResult;
+  public view: Observable<GridDataResult>;
+    public gridState: State = {
+      sort: [],
+      skip: 0,
+      take: 10,
+      // Initial filter descriptor
+      // filter: {
+      //   logic: 'and',
+      //   filters: [{ field: 'UnitPrice', operator: 'contains', value: '2' }]
+      // }
 
-  // Paging Settings
-  public pageSize = 10;
-  public skip = 0;
-
-  // Sorting Settings
-  public multiple = false;
-  public allowUnsort = true;
-  public sort: SortDescriptor[] = [{
-    field: 'login',
-    dir: 'asc'
-  }];
-  
-  private items: Object[];
-
-  // Constructor
-  constructor(private gitHubService: GitHubUserService) { 
-  }
-
-  // Events
-  ngOnInit() {
-   this.getGitHubUsers();
-  }
-
-  getGitHubUsers() {
-    return this.gitHubService.getGitHubUsers()
-      .subscribe(
-      users => {
-        if (users){
-          this.items = users;
-          this.loadUsers();
-        }
-        return null;
-      }, 
-      error => console.log(`Retrieval error: ${error}`)
-      )
-  }
-
-  public pageChange(event: PageChangeEvent): void {
-    this.skip = event.skip;
-    this.loadUsers();
-  }
-
-  public sortChange(sort: SortDescriptor[]): void {
-    this.sort = sort;
-    this.loadUsers();
-  }
-
-  // Helper Methods
-  private loadUsers(): void {
-    this.gridView = {
-      data: orderBy(this.items, this.sort).slice(this.skip, this.skip + this.pageSize),
-      total: this.items.length
     };
-  }
+
+    public editDataItem: Product;
+    public isNew: boolean;
+    private editService: EditService;
+
+    constructor(@Inject(EditService) editServiceFactory: any) {
+        this.editService = editServiceFactory();
+    }
+
+    public ngOnInit(): void {
+        this.view = this.editService.pipe(map(data => process(data, this.gridState)));
+
+        this.editService.read();
+    }
+
+    public onStateChange(state: State) {
+        this.gridState = state;
+
+        this.editService.read();
+    }
+
+    public addHandler() {
+        this.editDataItem = new Product();
+        this.isNew = true;
+    }
+
+    public editHandler({dataItem}) {
+        this.editDataItem = dataItem;
+        this.isNew = false;
+    }
+
+    public cancelHandler() {
+        this.editDataItem = undefined;
+    }
+
+    public saveHandler(product: Product) {
+        this.editService.save(product, this.isNew);
+
+        this.editDataItem = undefined;
+    }
+
+    public removeHandler({dataItem}) {
+        this.editService.remove(dataItem);
+    }
 }
